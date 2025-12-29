@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoodDelivery</title>
+    
+    <!-- Tailwind CSS CDN (cho development) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind Config -->
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              primary: '#EE501C',
+              'primary-light': '#FEECE5',
+              accent: '#FFC107',
+              'accent-light': '#FFF8E1',
+              'bg-footer': '#EE501C',
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+flask
+flask_pymongo
+python-dotenv
+flask_bcrypt
+pyjwt
+pydantic
+email-validator
+flask_cors
+PyJWT
