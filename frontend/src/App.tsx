@@ -30,6 +30,10 @@ import { ShipperHistoryPage } from './page/shipper/ShipperHistoryPage';
 import { ShipperPendingPage } from './page/shipper/ShipperPendingPage';
 import { ShipperProfilePage } from './page/shipper/ShipperProfilePage';
 
+
+console.log("API URL =", import.meta.env.VITE_API_URL);
+
+
 const App: React.FC = () => {
   return (
     <AuthProvider>

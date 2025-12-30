@@ -7,7 +7,7 @@ import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } fro
 import { getToken, removeItem, STORAGE_KEYS } from '../utils/storage';
 import { refreshAccessToken } from '../services/authService';
 
-const DEFAULT_BACKEND_URL = 'http://127.0.0.1:5000';
+const DEFAULT_BACKEND_URL = 'https://fooddelivery-t9qs.onrender.com';
 
 const normalizeUrl = (raw?: string) => {
   if (!raw || typeof raw !== 'string') {
