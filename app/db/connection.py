@@ -1,13 +1,17 @@
 from pymongo import MongoClient
 from core.config import config
 
-# Khởi tạo MongoDB client
-client = MongoClient(config.MONGO_URI)
+# =========================
+# MongoDB client & database
+# =========================
 
-# Chọn database
+client = MongoClient(config.MONGO_URI)
 db = client[config.MONGO_DB_NAME]
 
-# Thêm các collections vào đây
+# =========================
+# Collections
+# =========================
+
 users_collection = db['users']
 restaurants_collection = db['restaurants']
 orders_collection = db['orders']
@@ -15,6 +19,11 @@ payments_collection = db['payments']
 vouchers_collection = db['vouchers']
 reviews_collection = db['reviews']
 cart_collection = db['cart']
+
+
+# =========================
+# Helpers
+# =========================
 
 def get_db():
     """Trả về database instance"""
@@ -41,54 +50,98 @@ def ping_db():
         return False
 
 
-# Tạo indexes (chạy 1 lần khi khởi động app)
+def create_index_if_not_exists(collection, keys, **kwargs):
+    """
+    Tạo index chỉ khi chưa tồn tại
+    keys: 'field' hoặc [('field', 1)]
+    """
+    existing_indexes = collection.index_information()
+
+    # Chuẩn hoá keys về tuple để so sánh
+    if isinstance(keys, str):
+        keys_tuple = ((keys, 1),)
+    else:
+        keys_tuple = tuple(keys)
+
+    for index in existing_indexes.values():
+        if tuple(index.get('key', [])) == keys_tuple:
+            return  # Index đã tồn tại → bỏ qua
+
+    collection.create_index(keys, **kwargs)
+
+
+# =========================
+# Init indexes (SAFE)
+# =========================
+
 def init_indexes():
-    """Tạo indexes cho collections"""
+    """Tạo indexes an toàn (chỉ tạo nếu chưa tồn tại)"""
     try:
-        # Index cho users collection
-        users_collection.create_index('email', unique=True)
-        
-        # Index cho restaurants collection
-        # Unique index trên (name, address) combo - enforce logic trùng lặp
-        restaurants_collection.create_index([('name', 1), ('address', 1)], unique=True)
-        
-        # Text index trên tên nhà hàng để hỗ trợ search theo tên
-        restaurants_collection.create_index([('name', 'text')])
-        
-        # Index trên trường lồng nhau menu.items.name để hỗ trợ tìm món theo tên
-        restaurants_collection.create_index('menu.items.name')
-        
-        # Index cho orders collection
-        orders_collection.create_index('userId')
-        orders_collection.create_index('restaurantId')
-        orders_collection.create_index('shipperId')
-        orders_collection.create_index('status')
-        orders_collection.create_index([('userId', 1), ('createdAt', -1)])  # User orders sorted by date
-        orders_collection.create_index([('restaurantId', 1), ('createdAt', -1)])  # Restaurant orders
-        orders_collection.create_index([('shipperId', 1), ('createdAt', -1)])  # Shipper orders
-        orders_collection.create_index([('status', 1), ('createdAt', -1)])  # Pending orders query
+        # ===== USERS =====
+        create_index_if_not_exists(users_collection, 'email', unique=True)
 
-        # Index cho payments collection
-        payments_collection.create_index('orderId')
-        payments_collection.create_index('userId')
-        payments_collection.create_index('status')
-        payments_collection.create_index([('userId', 1), ('createdAt', -1)])
+        # ===== RESTAURANTS =====
+        create_index_if_not_exists(
+            restaurants_collection,
+            [('name', 1), ('address', 1)],
+            unique=True
+        )
+        create_index_if_not_exists(restaurants_collection, [('name', 'text')])
+        create_index_if_not_exists(restaurants_collection, 'menu.items.name')
 
-        # Index cho vouchers collection
-        vouchers_collection.create_index('code', unique=True)
-        vouchers_collection.create_index('active')
-        vouchers_collection.create_index('restaurantId')
-        
-        # Index cho reviews collection
-        reviews_collection.create_index('orderId', unique=True)  # 1 review per order
-        reviews_collection.create_index('userId')
-        reviews_collection.create_index('restaurantId')
-        reviews_collection.create_index([('restaurantId', 1), ('createdAt', -1)])  # Restaurant reviews sorted
-        reviews_collection.create_index([('userId', 1), ('createdAt', -1)])  # User reviews sorted
-        
-        # Index cho cart collection
-        cart_collection.create_index('userId', unique=True)  # 1 cart per user
-        
-        print("MongoDB indexes created successfully")
+        # ===== ORDERS =====
+        create_index_if_not_exists(orders_collection, 'userId')
+        create_index_if_not_exists(orders_collection, 'restaurantId')
+        create_index_if_not_exists(orders_collection, 'shipperId')
+        create_index_if_not_exists(orders_collection, 'status')
+        create_index_if_not_exists(
+            orders_collection,
+            [('userId', 1), ('createdAt', -1)]
+        )
+        create_index_if_not_exists(
+            orders_collection,
+            [('restaurantId', 1), ('createdAt', -1)]
+        )
+        create_index_if_not_exists(
+            orders_collection,
+            [('shipperId', 1), ('createdAt', -1)]
+        )
+        create_index_if_not_exists(
+            orders_collection,
+            [('status', 1), ('createdAt', -1)]
+        )
+
+        # ===== PAYMENTS =====
+        create_index_if_not_exists(payments_collection, 'orderId')
+        create_index_if_not_exists(payments_collection, 'userId')
+        create_index_if_not_exists(payments_collection, 'status')
+        create_index_if_not_exists(
+            payments_collection,
+            [('userId', 1), ('createdAt', -1)]
+        )
+
+        # ===== VOUCHERS =====
+        create_index_if_not_exists(vouchers_collection, 'code', unique=True)
+        create_index_if_not_exists(vouchers_collection, 'active')
+        create_index_if_not_exists(vouchers_collection, 'restaurantId')
+
+        # ===== REVIEWS =====
+        create_index_if_not_exists(reviews_collection, 'orderId', unique=True)
+        create_index_if_not_exists(reviews_collection, 'userId')
+        create_index_if_not_exists(reviews_collection, 'restaurantId')
+        create_index_if_not_exists(
+            reviews_collection,
+            [('restaurantId', 1), ('createdAt', -1)]
+        )
+        create_index_if_not_exists(
+            reviews_collection,
+            [('userId', 1), ('createdAt', -1)]
+        )
+
+        # ===== CART (FIX DUPLICATE ERROR) =====
+        create_index_if_not_exists(cart_collection, 'userId', unique=True)
+
+        print("MongoDB indexes initialized safely ✅")
+
     except Exception as e:
         print(f"Error creating indexes: {e}")
