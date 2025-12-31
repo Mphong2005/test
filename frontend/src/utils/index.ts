@@ -17,6 +17,7 @@ export {
   formatCurrency,
   formatNumber,
   formatPhone,
+  stripPhoneFormat,
   getInitials,
   normalizeString,
 } from './formatters';

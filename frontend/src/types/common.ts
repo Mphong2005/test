@@ -104,7 +104,10 @@ export interface Order {
   needsReview?: boolean;
   customer?: string;
   email?: string;
+  phone?: string; // Số điện thoại khách hàng
+  address?: string; // Địa chỉ giao hàng
   shipper?: ShipperInfo;
+  items?: Array<{ food_name: string; quantity: number; unit_price?: number }>; // Danh sách món trong đơn hàng
 }
 
 export interface Restaurant {

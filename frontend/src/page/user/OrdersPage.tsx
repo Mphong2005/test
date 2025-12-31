@@ -26,10 +26,16 @@ export const OrdersPage: React.FC = () => {
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedOrderForReview, setSelectedOrderForReview] = useState<Order | null>(null);
+  const [selectedOrderForDetail, setSelectedOrderForDetail] = useState<Order | null>(null);
+
+  // Pagination
+  const [visibleCount, setVisibleCount] = useState(10);
+  const ITEMS_PER_PAGE = 10;
 
   // Load orders from API
   useEffect(() => {
@@ -73,6 +79,22 @@ export const OrdersPage: React.FC = () => {
         return allOrders;
     }
   }, [activeTab, allOrders, pendingOrders, deliveringOrders, completedOrders, reviewOrders]);
+
+  // Reset pagination when changing tabs
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE);
+  }, [activeTab]);
+
+  // Paginated orders
+  const displayedOrders = useMemo(() => {
+    return filteredOrders.slice(0, visibleCount);
+  }, [filteredOrders, visibleCount]);
+
+  const hasMore = visibleCount < filteredOrders.length;
+
+  const handleLoadMore = () => {
+    setVisibleCount(prev => Math.min(prev + ITEMS_PER_PAGE, filteredOrders.length));
+  };
 
   // Handlers
   const handleCancelClick = (orderId: string) => {
@@ -159,8 +181,12 @@ export const OrdersPage: React.FC = () => {
     }
   };
 
-  const handleViewDetail = (foodId: string) => {
-    navigate(`/product/${foodId}`);
+  const handleViewDetail = (orderId: string) => {
+    const order = orders.find(o => o.id === orderId);
+    if (order) {
+      setSelectedOrderForDetail(order);
+      setDetailModalOpen(true);
+    }
   };
 
   const handleReorder = async (order: Order) => {
@@ -214,18 +240,18 @@ export const OrdersPage: React.FC = () => {
       </div>
 
       <div className="space-y-6">
-        {filteredOrders.length > 0 ? (
-          filteredOrders.map((order) => (
+        {displayedOrders.length > 0 ? (
+          displayedOrders.map((order) => (
             <div key={order.id} className="bg-white rounded-3xl overflow-hidden border border-gray-50 shadow-sm flex flex-col hover:shadow-md transition-all">
               <div className="p-6 flex flex-col md:flex-row gap-6">
-                <div onClick={() => handleViewDetail(order.foodId)} className="w-full md:w-48 h-36 rounded-2xl overflow-hidden shrink-0 cursor-pointer group">
+                <div onClick={() => handleViewDetail(order.id)} className="w-full md:w-48 h-36 rounded-2xl overflow-hidden shrink-0 cursor-pointer group">
                   <img src={order.imageUrl} alt={order.restaurantName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 </div>
 
                 <div className="flex-1 flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <h3 onClick={() => handleViewDetail(order.foodId)} className="text-lg font-bold text-gray-900 cursor-pointer hover:text-[#EE501C] transition-colors flex items-center gap-2">
+                      <h3 onClick={() => handleViewDetail(order.id)} className="text-lg font-bold text-gray-900 cursor-pointer hover:text-[#EE501C] transition-colors flex items-center gap-2">
                         <Store className="w-4 h-4 text-gray-400" />
                         {order.foodName || order.restaurantName}
                       </h3>
@@ -276,7 +302,7 @@ export const OrdersPage: React.FC = () => {
                     <div className="flex gap-3">
                       {order.isReviewed ? (
                         <>
-                          <button onClick={() => handleViewDetail(order.foodId)} className="flex-1 md:flex-none border border-gray-100 text-gray-500 font-bold py-2.5 px-8 rounded-2xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
+                          <button onClick={() => handleViewDetail(order.id)} className="flex-1 md:flex-none border border-gray-100 text-gray-500 font-bold py-2.5 px-8 rounded-2xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
                             <FileText className="w-4 h-4" /> Chi tiết
                           </button>
                           <button onClick={() => handleReorder(order)} className="flex-1 md:flex-none bg-[#EE501C] text-white font-bold py-2.5 px-8 rounded-2xl shadow-lg shadow-orange-100 hover:bg-[#d44719] transition-all text-sm flex items-center justify-center gap-2">
@@ -288,13 +314,13 @@ export const OrdersPage: React.FC = () => {
                           <button onClick={() => handleCancelClick(order.id)} className="flex-1 md:flex-none border border-gray-100 text-gray-500 font-bold py-2.5 px-6 rounded-2xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
                             <X className="w-4 h-4" /> Huỷ đơn
                           </button>
-                          <button onClick={() => handleViewDetail(order.foodId)} className="flex-1 md:flex-none bg-[#EE501C] text-white font-bold py-2.5 px-8 rounded-2xl shadow-lg shadow-orange-100 hover:bg-[#d44719] transition-all text-sm flex items-center justify-center">
+                          <button onClick={() => handleViewDetail(order.id)} className="flex-1 md:flex-none bg-[#EE501C] text-white font-bold py-2.5 px-8 rounded-2xl shadow-lg shadow-orange-100 hover:bg-[#d44719] transition-all text-sm flex items-center justify-center">
                             Chi tiết
                           </button>
                         </>
                       ) : order.status === 'DELIVERING' ? (
                         <>
-                          <button onClick={() => handleViewDetail(order.foodId)} className="flex-1 md:flex-none border border-gray-100 text-gray-500 font-bold py-2.5 px-8 rounded-2xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center">
+                          <button onClick={() => handleViewDetail(order.id)} className="flex-1 md:flex-none border border-gray-100 text-gray-500 font-bold py-2.5 px-8 rounded-2xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center">
                             Chi tiết
                           </button>
                           <button className="flex-1 md:flex-none bg-[#EE501C] text-white font-bold py-2.5 px-8 rounded-2xl shadow-lg shadow-orange-100 hover:bg-[#d44719] transition-all text-sm flex items-center justify-center gap-2">
@@ -303,7 +329,7 @@ export const OrdersPage: React.FC = () => {
                         </>
                       ) : order.status === 'COMPLETED' ? (
                         <>
-                          <button onClick={() => handleViewDetail(order.foodId)} className="flex-1 md:flex-none border border-gray-100 text-gray-500 font-bold py-2.5 px-8 rounded-2xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
+                          <button onClick={() => handleViewDetail(order.id)} className="flex-1 md:flex-none border border-gray-100 text-gray-500 font-bold py-2.5 px-8 rounded-2xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
                             <FileText className="w-4 h-4" /> Chi tiết
                           </button>
                           {order.needsReview ? (
@@ -318,7 +344,7 @@ export const OrdersPage: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <button onClick={() => handleViewDetail(order.foodId)} className="flex-1 md:flex-none border border-gray-100 text-gray-500 font-bold py-2.5 px-8 rounded-2xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
+                          <button onClick={() => handleViewDetail(order.id)} className="flex-1 md:flex-none border border-gray-100 text-gray-500 font-bold py-2.5 px-8 rounded-2xl hover:bg-gray-50 transition-colors text-sm flex items-center justify-center gap-2">
                             <FileText className="w-4 h-4" /> Chi tiết
                           </button>
                           <button onClick={() => handleReorder(order)} className="flex-1 md:flex-none bg-[#EE501C] text-white font-bold py-2.5 px-8 rounded-2xl shadow-lg shadow-orange-100 hover:bg-[#d44719] transition-all text-sm flex items-center justify-center gap-2">
@@ -353,10 +379,16 @@ export const OrdersPage: React.FC = () => {
         )}
       </div>
 
-      {filteredOrders.length > 0 && activeTab === 'all' && (
+      {hasMore && (
         <div className="mt-12 flex flex-col items-center gap-2">
-          <button className="text-gray-400 text-sm font-bold flex items-center gap-2 hover:text-[#EE501C] transition-colors">
-            Xem thêm đơn hàng cũ hơn <ChevronDown className="w-4 h-4" />
+          <p className="text-xs text-gray-400 mb-2">
+            Đang hiển thị {displayedOrders.length} / {filteredOrders.length} đơn hàng
+          </p>
+          <button 
+            onClick={handleLoadMore}
+            className="text-gray-400 text-sm font-bold flex items-center gap-2 hover:text-[#EE501C] transition-colors"
+          >
+            Xem thêm {Math.min(ITEMS_PER_PAGE, filteredOrders.length - visibleCount)} đơn hàng <ChevronDown className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -382,6 +414,173 @@ export const OrdersPage: React.FC = () => {
         onClose={() => { setContactModalOpen(false); setSelectedOrderId(null); }}
         shipper={getShipperInfo()}
       />
+
+      {/* Order Detail Modal */}
+      {detailModalOpen && selectedOrderForDetail && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200 my-8">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black text-gray-800">Chi tiết đơn hàng</h2>
+                <p className="text-sm text-gray-500 mt-1">#{selectedOrderForDetail.id.substring(selectedOrderForDetail.id.length - 8)}</p>
+              </div>
+              <button
+                onClick={() => { setDetailModalOpen(false); setSelectedOrderForDetail(null); }}
+                className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+              {/* Status */}
+              <div className="bg-gradient-to-r from-orange-50 to-orange-100 rounded-2xl p-4 border border-orange-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Trạng thái đơn hàng</p>
+                    <p className="text-lg font-bold text-[#EE501C]">
+                      {selectedOrderForDetail.status === 'PENDING' && '🕐 Đang chờ xác nhận'}
+                      {selectedOrderForDetail.status === 'DELIVERING' && '🚚 Đang giao hàng'}
+                      {selectedOrderForDetail.status === 'COMPLETED' && '✅ Đã hoàn thành'}
+                      {selectedOrderForDetail.status === 'CANCELLED' && '❌ Đã hủy'}
+                    </p>
+                  </div>
+                  {selectedOrderForDetail.orderTime && (
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">Đặt lúc</p>
+                      <p className="text-sm font-bold text-gray-700">{new Date(selectedOrderForDetail.orderTime).toLocaleString('vi-VN')}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Food Info */}
+              <div className="space-y-3">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                  <Utensils className="w-4 h-4 text-[#EE501C]" />
+                  Thông tin món ăn
+                </h3>
+                {selectedOrderForDetail.items && selectedOrderForDetail.items.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedOrderForDetail.items.map((item, index) => (
+                      <div key={index} className="flex gap-4 bg-gray-50 rounded-2xl p-4">
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <h4 className="font-bold text-gray-800 mb-1">{item.food_name}</h4>
+                              <p className="text-sm text-gray-500 mb-2">{selectedOrderForDetail.restaurantName}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">Số lượng: <span className="font-bold">{item.quantity}</span></span>
+                            <span className="text-lg font-bold text-[#EE501C]">{formatNumber((item.unit_price || 0) * item.quantity)}đ</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex gap-4 bg-gray-50 rounded-2xl p-4">
+                    <img
+                      src={selectedOrderForDetail.imageUrl}
+                      alt={selectedOrderForDetail.foodName || selectedOrderForDetail.restaurantName}
+                      className="w-24 h-24 rounded-xl object-cover"
+                    />
+                    <div className="flex-1">
+                      <h4 className="font-bold text-gray-800 mb-1">{selectedOrderForDetail.foodName || 'Món ăn'}</h4>
+                      <p className="text-sm text-gray-500 mb-2">{selectedOrderForDetail.restaurantName}</p>
+                      <p className="text-xs text-gray-400 mb-2">{selectedOrderForDetail.description}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-bold text-[#EE501C]">{formatNumber(selectedOrderForDetail.totalAmount)}đ</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Customer Info */}
+              <div className="space-y-3">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                  <Navigation className="w-4 h-4 text-[#EE501C]" />
+                  Thông tin khách hàng
+                </h3>
+                <div className="bg-gray-50 rounded-2xl p-4 space-y-2">
+                  {selectedOrderForDetail.customer && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-sm text-gray-500 min-w-[100px]">Tên:</span>
+                      <span className="text-sm font-medium text-gray-800">{selectedOrderForDetail.customer}</span>
+                    </div>
+                  )}
+                  {selectedOrderForDetail.phone && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-sm text-gray-500 min-w-[100px]">Số điện thoại:</span>
+                      <span className="text-sm font-medium text-gray-800">{selectedOrderForDetail.phone}</span>
+                    </div>
+                  )}
+                  {selectedOrderForDetail.email && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-sm text-gray-500 min-w-[100px]">Email:</span>
+                      <span className="text-sm text-gray-600">{selectedOrderForDetail.email}</span>
+                    </div>
+                  )}
+                  {selectedOrderForDetail.address && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-sm text-gray-500 min-w-[100px]">Địa chỉ:</span>
+                      <span className="text-sm font-medium text-gray-800">{selectedOrderForDetail.address}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Shipper Info */}
+              {selectedOrderForDetail.shipper && (
+                <div className="space-y-3">
+                  <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                    <Bike className="w-4 h-4 text-[#EE501C]" />
+                    Thông tin tài xế
+                  </h3>
+                  <div className="bg-gray-50 rounded-2xl p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500 min-w-[100px]">Tên:</span>
+                      <span className="text-sm font-bold text-gray-800">{selectedOrderForDetail.shipper.fullname}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500 min-w-[100px]">Số điện thoại:</span>
+                      <span className="text-sm font-medium text-gray-800">{selectedOrderForDetail.shipper.phone_number}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Payment Info */}
+              <div className="space-y-3">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[#EE501C]" />
+                  Thông tin thanh toán
+                </h3>
+                <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
+                  <div className="flex justify-between items-end pt-2">
+                    <span className="font-bold text-gray-800">Tổng thanh toán</span>
+                    <span className="text-2xl font-black text-[#EE501C]">{formatNumber(selectedOrderForDetail.totalAmount)}đ</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-gray-100">
+              <button
+                onClick={() => { setDetailModalOpen(false); setSelectedOrderForDetail(null); }}
+                className="w-full bg-[#EE501C] text-white font-bold py-3 rounded-2xl hover:bg-[#d44719] transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -81,6 +81,13 @@ export function transformOrderData(order: any): Order {
         needsReview,
         customer: order.userFullname || order.user_fullname || order.customer || 'Khách lẻ',
         email: order.userEmail || order.user_email || order.email,
+        phone: order.userPhone || order.user_phone || order.phone || order.phone_number,
+        address: order.address || order.delivery_address || order.shipping_address,
+        items: items.map((item: any) => ({
+            food_name: item.food_name || item.foodName || '',
+            quantity: item.quantity || 1,
+            unit_price: item.unit_price || item.unitPrice || 0,
+        })),
         shipper: order.shipper ? {
             shipperId: order.shipper.shipperId || order.shipper.shipper_id || '',
             fullname: order.shipper.fullname || '',

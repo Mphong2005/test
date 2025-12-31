@@ -203,6 +203,9 @@ class UserService:
 
     def update_user(self, user_id: str, user_data: UserUpdateRequest) -> Dict:
         """Cập nhật thông tin user"""
+        print(f"[UPDATE_USER] user_id: {user_id}")
+        print(f"[UPDATE_USER] user_data: {user_data.model_dump(exclude_unset=True, exclude_none=True)}")
+        
         # Kiểm tra user tồn tại
         user = self.find_by_id(user_id)
         if not user:
@@ -213,6 +216,7 @@ class UserService:
         if not updated_user:
             raise ValueError('Không thể cập nhật user')
         
+        print(f"[UPDATE_USER] Success! Updated user: {updated_user.email}")
         return self._user_to_response(updated_user).model_dump()
 
     def delete_user(self, user_id: str) -> Dict:

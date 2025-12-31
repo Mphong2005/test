@@ -388,12 +388,22 @@ class OrderService:
             payment_status = PaymentStatus.PENDING
             payment = None
             try:
+                print(f"[DEBUG] Payment method: {req.payment_method}")
+                
+                # CHỈ TRỪ BALANCE KHI PAYMENT METHOD LÀ BALANCE
                 if req.payment_method == PaymentMethod.BALANCE:
                     # Kiểm tra và trừ số dư
                     print(f"[DEBUG] Deducting balance - user_id: {user_id}, amount: {created.total_amount}, order_id: {created.id}")
                     self.user_service.deduct_balance(user_id, created.total_amount)
                     payment_status = PaymentStatus.PAID
                     print(f"[DEBUG] Balance deducted successfully")
+                elif req.payment_method == PaymentMethod.COD:
+                    # COD: Không trừ balance, payment_status = PENDING
+                    print(f"[DEBUG] COD payment - No balance deduction")
+                    payment_status = PaymentStatus.PENDING
+                else:
+                    print(f"[WARNING] Unknown payment method: {req.payment_method}")
+                    payment_status = PaymentStatus.PENDING
 
                 payment = payment_service.create_payment(
                     order_id=str(created.id),

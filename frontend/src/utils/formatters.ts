@@ -80,12 +80,23 @@ export const formatPhone = (phone: string | null | undefined): string => {
     return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
   }
 
-  // Format as 0xxxx xxx xxx for 11 digits
-  if (digits.length === 11) {
-    return `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+  // Format as (+84) xxx xxx xxx
+  if (digits.length === 11 && digits.startsWith('84')) {
+    return `(+${digits.slice(0, 2)}) ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8)}`;
   }
 
   return phone;
+};
+
+/**
+ * Strip phone number format to only digits for backend
+ * @param phone - Formatted phone number string
+ * @returns Phone number with only digits
+ */
+export const stripPhoneFormat = (phone: string | null | undefined): string => {
+  if (!phone) return '';
+  // Remove all non-digits
+  return phone.replace(/\D/g, '');
 };
 
 /**
