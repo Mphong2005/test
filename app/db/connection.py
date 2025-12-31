@@ -1,17 +1,14 @@
-from pymongo import MongoClient
+from pymongo import MongoClient, ASCENDING, DESCENDING, TEXT
+from pymongo.errors import DuplicateKeyError
 from core.config import config
 
-# =========================
-# MongoDB client & database
-# =========================
-
+# ======================
+# MongoDB connection
+# ======================
 client = MongoClient(config.MONGO_URI)
 db = client[config.MONGO_DB_NAME]
 
-# =========================
 # Collections
-# =========================
-
 users_collection = db['users']
 restaurants_collection = db['restaurants']
 orders_collection = db['orders']
@@ -21,127 +18,172 @@ reviews_collection = db['reviews']
 cart_collection = db['cart']
 
 
-# =========================
+# ======================
 # Helpers
-# =========================
-
+# ======================
 def get_db():
-    """Trả về database instance"""
     return db
 
 
 def get_collection(collection_name: str):
-    """Lấy collection theo tên"""
     return db[collection_name]
 
 
 def close_connection():
-    """Đóng kết nối MongoDB"""
     client.close()
 
 
 def ping_db():
-    """Kiểm tra kết nối MongoDB"""
     try:
         client.admin.command('ping')
         return True
     except Exception as e:
-        print(f"MongoDB connection failed: {e}")
+        print(f"❌ MongoDB connection failed: {e}")
         return False
 
 
-def create_index_if_not_exists(collection, keys, **kwargs):
+def index_exists(collection, index_name: str) -> bool:
+    """Kiểm tra index đã tồn tại chưa"""
+    return index_name in collection.index_information()
+
+
+def safe_create_index(collection, keys, **kwargs):
     """
-    Tạo index chỉ khi chưa tồn tại
-    keys: 'field' hoặc [('field', 1)]
+    Tạo index an toàn:
+    - Không tạo lại nếu đã tồn tại
+    - Không làm crash app nếu bị DuplicateKey
     """
-    existing_indexes = collection.index_information()
+    try:
+        index_name = kwargs.get("name")
+        if index_name and index_exists(collection, index_name):
+            return
 
-    # Chuẩn hoá keys về tuple để so sánh
-    if isinstance(keys, str):
-        keys_tuple = ((keys, 1),)
-    else:
-        keys_tuple = tuple(keys)
+        collection.create_index(keys, **kwargs)
 
-    for index in existing_indexes.values():
-        if tuple(index.get('key', [])) == keys_tuple:
-            return  # Index đã tồn tại → bỏ qua
-
-    collection.create_index(keys, **kwargs)
+    except DuplicateKeyError as e:
+        print(f"⚠️  Skip index (duplicate data): {collection.name} | {keys}")
+    except Exception as e:
+        print(f"❌ Index error on {collection.name}: {e}")
 
 
-# =========================
+# ======================
 # Init indexes (SAFE)
-# =========================
-
+# ======================
 def init_indexes():
-    """Tạo indexes an toàn (chỉ tạo nếu chưa tồn tại)"""
     try:
         # ===== USERS =====
-        create_index_if_not_exists(users_collection, 'email', unique=True)
+        safe_create_index(
+            users_collection,
+            [('email', ASCENDING)],
+            unique=True,
+            name='users_email_unique'
+        )
 
         # ===== RESTAURANTS =====
-        create_index_if_not_exists(
+        safe_create_index(
             restaurants_collection,
-            [('name', 1), ('address', 1)],
-            unique=True
+            [('name', ASCENDING), ('address', ASCENDING)],
+            unique=True,
+            name='restaurants_name_address_unique'
         )
-        create_index_if_not_exists(restaurants_collection, [('name', 'text')])
-        create_index_if_not_exists(restaurants_collection, 'menu.items.name')
+
+        safe_create_index(
+            restaurants_collection,
+            [('name', TEXT)],
+            name='restaurants_name_text'
+        )
+
+        safe_create_index(
+            restaurants_collection,
+            [('menu.items.name', ASCENDING)],
+            name='restaurants_menu_item_name'
+        )
 
         # ===== ORDERS =====
-        create_index_if_not_exists(orders_collection, 'userId')
-        create_index_if_not_exists(orders_collection, 'restaurantId')
-        create_index_if_not_exists(orders_collection, 'shipperId')
-        create_index_if_not_exists(orders_collection, 'status')
-        create_index_if_not_exists(
+        safe_create_index(orders_collection, [('userId', ASCENDING)], name='orders_userId')
+        safe_create_index(orders_collection, [('restaurantId', ASCENDING)], name='orders_restaurantId')
+        safe_create_index(orders_collection, [('shipperId', ASCENDING)], name='orders_shipperId')
+        safe_create_index(orders_collection, [('status', ASCENDING)], name='orders_status')
+
+        safe_create_index(
             orders_collection,
-            [('userId', 1), ('createdAt', -1)]
+            [('userId', ASCENDING), ('createdAt', DESCENDING)],
+            name='orders_user_createdAt'
         )
-        create_index_if_not_exists(
+
+        safe_create_index(
             orders_collection,
-            [('restaurantId', 1), ('createdAt', -1)]
+            [('restaurantId', ASCENDING), ('createdAt', DESCENDING)],
+            name='orders_restaurant_createdAt'
         )
-        create_index_if_not_exists(
+
+        safe_create_index(
             orders_collection,
-            [('shipperId', 1), ('createdAt', -1)]
+            [('shipperId', ASCENDING), ('createdAt', DESCENDING)],
+            name='orders_shipper_createdAt'
         )
-        create_index_if_not_exists(
+
+        safe_create_index(
             orders_collection,
-            [('status', 1), ('createdAt', -1)]
+            [('status', ASCENDING), ('createdAt', DESCENDING)],
+            name='orders_status_createdAt'
         )
 
         # ===== PAYMENTS =====
-        create_index_if_not_exists(payments_collection, 'orderId')
-        create_index_if_not_exists(payments_collection, 'userId')
-        create_index_if_not_exists(payments_collection, 'status')
-        create_index_if_not_exists(
+        safe_create_index(payments_collection, [('orderId', ASCENDING)], name='payments_orderId')
+        safe_create_index(payments_collection, [('userId', ASCENDING)], name='payments_userId')
+        safe_create_index(payments_collection, [('status', ASCENDING)], name='payments_status')
+
+        safe_create_index(
             payments_collection,
-            [('userId', 1), ('createdAt', -1)]
+            [('userId', ASCENDING), ('createdAt', DESCENDING)],
+            name='payments_user_createdAt'
         )
 
         # ===== VOUCHERS =====
-        create_index_if_not_exists(vouchers_collection, 'code', unique=True)
-        create_index_if_not_exists(vouchers_collection, 'active')
-        create_index_if_not_exists(vouchers_collection, 'restaurantId')
+        safe_create_index(
+            vouchers_collection,
+            [('code', ASCENDING)],
+            unique=True,
+            name='vouchers_code_unique'
+        )
+
+        safe_create_index(vouchers_collection, [('active', ASCENDING)], name='vouchers_active')
+        safe_create_index(vouchers_collection, [('restaurantId', ASCENDING)], name='vouchers_restaurantId')
 
         # ===== REVIEWS =====
-        create_index_if_not_exists(reviews_collection, 'orderId', unique=True)
-        create_index_if_not_exists(reviews_collection, 'userId')
-        create_index_if_not_exists(reviews_collection, 'restaurantId')
-        create_index_if_not_exists(
+        safe_create_index(
             reviews_collection,
-            [('restaurantId', 1), ('createdAt', -1)]
-        )
-        create_index_if_not_exists(
-            reviews_collection,
-            [('userId', 1), ('createdAt', -1)]
+            [('orderId', ASCENDING)],
+            unique=True,
+            name='reviews_order_unique'
         )
 
-        # ===== CART (FIX DUPLICATE ERROR) =====
-        create_index_if_not_exists(cart_collection, 'userId', unique=True)
+        safe_create_index(reviews_collection, [('userId', ASCENDING)], name='reviews_userId')
+        safe_create_index(reviews_collection, [('restaurantId', ASCENDING)], name='reviews_restaurantId')
 
-        print("MongoDB indexes initialized safely ✅")
+        safe_create_index(
+            reviews_collection,
+            [('restaurantId', ASCENDING), ('createdAt', DESCENDING)],
+            name='reviews_restaurant_createdAt'
+        )
+
+        safe_create_index(
+            reviews_collection,
+            [('userId', ASCENDING), ('createdAt', DESCENDING)],
+            name='reviews_user_createdAt'
+        )
+
+        # ===== CART =====
+        # ⚠️ Cart bị duplicate nên chỉ tạo nếu sạch dữ liệu
+        safe_create_index(
+            cart_collection,
+            [('userId', ASCENDING)],
+            unique=True,
+            name='cart_user_unique'
+        )
+
+        print("✅ MongoDB indexes initialized safely")
 
     except Exception as e:
-        print(f"Error creating indexes: {e}")
+        print(f"❌ init_indexes failed: {e}")
