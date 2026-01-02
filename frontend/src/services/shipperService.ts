@@ -5,6 +5,7 @@
  */
 
 import { OrderStatus, ShipperOrder, ShipperProfile } from '../types/shipper';
+import { formatDateVN, formatDateISO } from '../utils/formatters';
 
 /**
  * Map backend order status to frontend OrderStatus
@@ -24,17 +25,20 @@ export function mapShipperOrderStatus(status: string): OrderStatus {
  */
 export function transformToShipperOrder(order: any): ShipperOrder {
     // Format time from ISO string to "HH:mm - DD/MM/YYYY"
+    // Extract trực tiếp từ ISO string, không dùng Date object vì sẽ bị convert timezone
     let timeDisplay = '';
     const dateStr = order.createdAt || order.created_at;
     if (dateStr) {
         try {
-            const date = new Date(dateStr);
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            timeDisplay = `${hours}:${minutes} - ${day}/${month}/${year}`;
+            // ISO format: "2026-01-02T10:06:20.541+00:00"
+            // Extract trực tiếp: year, month, day, hour, minute
+            const match = dateStr.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+            if (match) {
+                const [, year, month, day, hours, minutes] = match;
+                timeDisplay = `${hours}:${minutes} - ${day}/${month}/${year}`;
+            } else {
+                timeDisplay = dateStr;
+            }
         } catch {
             timeDisplay = dateStr;
         }
@@ -86,42 +90,20 @@ export function transformShipperOrders(orders: any[]): ShipperOrder[] {
  * Transform backend user data to ShipperProfile format
  */
 export function transformToShipperProfile(user: any): ShipperProfile {
-    // Format created_at date for display (DD/MM/YYYY)
-    let joinDate = '';
+    // Format created_at date for display (DD/MM/YYYY) using timezone-safe formatter
     const createdAt = user.created_at || user.createdAt;
-    if (createdAt) {
-        try {
-            const date = new Date(createdAt);
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            joinDate = `${day}/${month}/${year}`;
-        } catch {
-            joinDate = createdAt;
-        }
-    }
+    const joinDate = formatDateVN(createdAt);
 
-    // Format birthday for date input (YYYY-MM-DD)
-    let dob = '';
+    // Format birthday for date input (YYYY-MM-DD) using timezone-safe formatter
     const birthday = user.birthday || user.dob;
-    if (birthday) {
-        try {
-            const date = new Date(birthday);
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            dob = `${year}-${month}-${day}`;
-        } catch {
-            dob = birthday;
-        }
-    }
+    const dob = formatDateISO(birthday);
 
     return {
         name: user.fullname || 'Shipper',
         email: user.email || '',
         avatar: user.avatar || 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&q=60',
         rank: 'Tài xế 5 sao', // Default rank since backend doesn't have this field
-        joinDate: joinDate,
+        joinDate: joinDate !== 'Chưa cập nhật' ? joinDate : '',
         phone: user.phone_number || '',
         address: user.address || 'Hà Nội',
         dob: dob,

@@ -285,7 +285,7 @@ export const OrdersPage: React.FC = () => {
 
                     <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
                       <Clock className="w-3.5 h-3.5" />
-                      <span>Đặt lúc {order.orderTime}</span>
+                      <span>{order.orderTime}</span>
                     </div>
 
                     <div className="bg-gray-50 rounded-xl p-3 mb-4 border border-gray-100">
@@ -384,7 +384,7 @@ export const OrdersPage: React.FC = () => {
           <p className="text-xs text-gray-400 mb-2">
             Đang hiển thị {displayedOrders.length} / {filteredOrders.length} đơn hàng
           </p>
-          <button 
+          <button
             onClick={handleLoadMore}
             className="text-gray-400 text-sm font-bold flex items-center gap-2 hover:text-[#EE501C] transition-colors"
           >
@@ -449,8 +449,8 @@ export const OrdersPage: React.FC = () => {
                   </div>
                   {selectedOrderForDetail.orderTime && (
                     <div className="text-right">
-                      <p className="text-xs text-gray-500">Đặt lúc</p>
-                      <p className="text-sm font-bold text-gray-700">{new Date(selectedOrderForDetail.orderTime).toLocaleString('vi-VN')}</p>
+                      <p className="text-xs text-gray-500">Thời gian</p>
+                      <p className="text-sm font-bold text-gray-700">{selectedOrderForDetail.orderTime.replace('Đặt lúc ', '')}</p>
                     </div>
                   )}
                 </div>

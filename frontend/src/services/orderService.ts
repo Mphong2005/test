@@ -35,21 +35,23 @@ export function transformOrderData(order: any): Order {
         ? items.map((item: any) => `${item.food_name} x${item.quantity}`).join(', ')
         : 'Không có thông tin món';
 
-    // Parse date - Fix timezone issue
+    // Parse date - Backend lưu local time nhưng MongoDB đánh dấu là UTC
+    // Cần extract trực tiếp các thành phần từ ISO string, không dùng Date object
+    // vì JavaScript Date vẫn sẽ convert timezone
     let orderTime = '';
     const dateStr = order.createdAt || order.created_at;
     if (dateStr) {
         try {
-            // Parse date string and convert to local time
-            const date = new Date(dateStr);
-            // Format: "HH:mm:ss dd/MM/yyyy"
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const seconds = String(date.getSeconds()).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            orderTime = `Đặt lúc ${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
+            // ISO format: "2026-01-02T10:06:20.541+00:00" hoặc "2026-01-02T10:06:20.541Z"
+            // Extract trực tiếp: year, month, day, hour, minute, second
+            const match = dateStr.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+            if (match) {
+                const [, year, month, day, hours, minutes, seconds] = match;
+                orderTime = `Đặt lúc ${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
+            } else {
+                // Fallback nếu không match ISO format
+                orderTime = dateStr;
+            }
         } catch {
             orderTime = dateStr;
         }

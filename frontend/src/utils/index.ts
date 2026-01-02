@@ -12,7 +12,9 @@ export {
 
 // Formatters
 export {
+  parseLocalDate,
   formatDateVN,
+  formatDateTimeVN,
   formatDateISO,
   formatCurrency,
   formatNumber,
