@@ -4,8 +4,6 @@
  * Bao gồm transform data từ backend sang frontend format
  */
 
-import { formatDateTimeVN } from '../utils/formatters';
-
 /**
  * Transform dashboard data from backend to frontend format
  */
@@ -72,7 +70,7 @@ export function transformRecentActivities(activities: any[]) {
         user: act.userName || act.user_name || 'Unknown',
         action: act.type || 'Unknown',
         target: act.orderId || act.order_id || '',
-        time: act.timestamp ? formatDateTimeVN(act.timestamp) : '',
+        time: act.timestamp ? new Date(act.timestamp).toLocaleString('vi-VN') : '',
         type: act.type?.toLowerCase() || 'order',
     }));
 }

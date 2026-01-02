@@ -54,7 +54,6 @@ export interface FoodItem {
   deliveryTime?: string;
   promoTag?: string;
   restaurantId?: string;
-  reviewCount?: number;
 }
 
 export interface Voucher {
