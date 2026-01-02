@@ -25,6 +25,8 @@ export const ProductDetailPage: React.FC = () => {
   const [relatedFoods, setRelatedFoods] = useState<FoodItem[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [restaurantRating, setRestaurantRating] = useState<number>(0);
+  const [restaurantReviewCount, setRestaurantReviewCount] = useState<number>(0);
   
   // Cart items state - CẦN DÙNG STATE ĐỂ CẬP NHẬT KHI QUAY LẠI TỪ CHECKOUT
   const locationState = location.state as any;
@@ -81,6 +83,12 @@ export const ProductDetailPage: React.FC = () => {
           // 3. Fetch Reviews for this food
           const reviewsData = await getReviewsByFoodIdApi(id);
           setReviews(reviewsData);
+          
+          // Store current food rating for restaurant calculation
+          const currentFoodReviewCount = reviewsData.length;
+          const currentFoodRating = currentFoodReviewCount > 0
+            ? Number((reviewsData.reduce((acc, r) => acc + r.rating, 0) / currentFoodReviewCount).toFixed(1))
+            : 0;
 
           // 4. Fetch Restaurant & Related Foods
           if (foodData && foodData.restaurantId) {
@@ -127,7 +135,54 @@ export const ProductDetailPage: React.FC = () => {
               }
 
               console.log('Total related foods found:', related.length);
-              setRelatedFoods(related);
+              
+              // Fetch reviews for all related foods to get actual ratings
+              const relatedWithRatings = await Promise.all(
+                related.map(async (food) => {
+                  try {
+                    const foodReviews = await getReviewsByFoodIdApi(food.id);
+                    const reviewCount = foodReviews.length;
+                    const averageRating = reviewCount > 0
+                      ? Number((foodReviews.reduce((acc, r) => acc + r.rating, 0) / reviewCount).toFixed(1))
+                      : 0;
+                    return {
+                      ...food,
+                      rating: averageRating,
+                      reviewCount: reviewCount,
+                    };
+                  } catch (error) {
+                    console.error(`Error fetching reviews for ${food.id}:`, error);
+                    return {
+                      ...food,
+                      rating: 0,
+                      reviewCount: 0,
+                    };
+                  }
+                })
+              );
+              
+              setRelatedFoods(relatedWithRatings);
+              
+              // Calculate restaurant rating from ALL foods (current food + related foods)
+              // Use already fetched current food reviews
+              // Calculate average rating of all foods (simple average, not weighted)
+              const allFoodsWithRatings = [
+                { rating: currentFoodRating, reviewCount: currentFoodReviewCount },
+                ...relatedWithRatings.map(f => ({ rating: f.rating, reviewCount: f.reviewCount || 0 }))
+              ];
+              
+              // Filter out foods with no reviews (rating = 0 and reviewCount = 0)
+              const foodsWithReviews = allFoodsWithRatings.filter(f => f.reviewCount > 0);
+              
+              const totalReviewCount = allFoodsWithRatings.reduce((sum, f) => sum + f.reviewCount, 0);
+              
+              // Simple average of food ratings (not weighted by review count)
+              const restaurantAvgRating = foodsWithReviews.length > 0
+                ? Number((foodsWithReviews.reduce((sum, f) => sum + f.rating, 0) / foodsWithReviews.length).toFixed(1))
+                : 0;
+              
+              setRestaurantRating(restaurantAvgRating);
+              setRestaurantReviewCount(totalReviewCount);
             } else {
               console.log('Menu not available, using fallback API');
               // Fallback: Fetch related foods from API if menu is not available
@@ -135,7 +190,54 @@ export const ProductDetailPage: React.FC = () => {
               const related = allFoods
                 .filter(f => f.restaurantId === foodData.restaurantId && f.id !== id);
               console.log('Fallback related foods:', related.length);
-              setRelatedFoods(related);
+              
+              // Fetch reviews for all related foods to get actual ratings
+              const relatedWithRatings = await Promise.all(
+                related.map(async (food) => {
+                  try {
+                    const foodReviews = await getReviewsByFoodIdApi(food.id);
+                    const reviewCount = foodReviews.length;
+                    const averageRating = reviewCount > 0
+                      ? Number((foodReviews.reduce((acc, r) => acc + r.rating, 0) / reviewCount).toFixed(1))
+                      : 0;
+                    return {
+                      ...food,
+                      rating: averageRating,
+                      reviewCount: reviewCount,
+                    };
+                  } catch (error) {
+                    console.error(`Error fetching reviews for ${food.id}:`, error);
+                    return {
+                      ...food,
+                      rating: food.rating || 0,
+                      reviewCount: 0,
+                    };
+                  }
+                })
+              );
+              
+              setRelatedFoods(relatedWithRatings);
+              
+              // Calculate restaurant rating from ALL foods (current food + related foods)
+              // Use already fetched current food reviews
+              // Calculate average rating of all foods (simple average, not weighted)
+              const allFoodsWithRatings = [
+                { rating: currentFoodRating, reviewCount: currentFoodReviewCount },
+                ...relatedWithRatings.map(f => ({ rating: f.rating, reviewCount: f.reviewCount || 0 }))
+              ];
+              
+              // Filter out foods with no reviews (rating = 0 and reviewCount = 0)
+              const foodsWithReviews = allFoodsWithRatings.filter(f => f.reviewCount > 0);
+              
+              const totalReviewCount = allFoodsWithRatings.reduce((sum, f) => sum + f.reviewCount, 0);
+              
+              // Simple average of food ratings (not weighted by review count)
+              const restaurantAvgRating = foodsWithReviews.length > 0
+                ? Number((foodsWithReviews.reduce((sum, f) => sum + f.rating, 0) / foodsWithReviews.length).toFixed(1))
+                : 0;
+              
+              setRestaurantRating(restaurantAvgRating);
+              setRestaurantReviewCount(totalReviewCount);
             }
           }
         }
@@ -315,12 +417,12 @@ export const ProductDetailPage: React.FC = () => {
               <div className="flex items-center gap-1 text-[11px] text-gray-400 mb-1 mt-1">
                 <MapPin className="w-3 h-3" /> {displayRestaurant.address}
               </div>
-              {/* Updated Rating Section: Clickable and uses real calculated data */}
+              {/* Updated Rating Section: Clickable and uses restaurant rating (average of all foods) */}
               <div
                 onClick={handleViewReviews}
                 className="flex items-center gap-1 text-[11px] text-[#EE501C] font-bold cursor-pointer hover:underline"
               >
-                <Star className="w-3 h-3 fill-[#EE501C]" /> {averageRating} <span className="text-gray-400 font-medium">({totalReviews} đánh giá)</span>
+                <Star className="w-3 h-3 fill-[#EE501C]" /> {restaurantRating > 0 ? restaurantRating.toFixed(1) : '0.0'} <span className="text-gray-400 font-medium">({restaurantReviewCount} đánh giá)</span>
               </div>
             </div>
           </div>
@@ -544,7 +646,7 @@ export const ProductDetailPage: React.FC = () => {
                   <div className="p-3 md:p-4">
                     <h4 className="font-bold text-gray-800 truncate mb-1 text-sm md:text-base">{f.name}</h4>
                     <div className="flex items-center gap-1 text-[10px] text-[#EE501C] font-bold mb-2 md:mb-3">
-                      <Star className="w-3 h-3 fill-[#EE501C]" /> {f.rating} <span className="text-gray-300 font-medium">(50+)</span>
+                      <Star className={`w-3 h-3 ${f.rating > 0 ? 'fill-[#EE501C]' : 'fill-none text-gray-300'}`} /> {f.rating > 0 ? f.rating.toFixed(1) : '0.0'} <span className="text-gray-300 font-medium">({f.reviewCount || 0}+)</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-base md:text-lg font-black text-[#EE501C]">{formatNumber(f.price)}đ</span>

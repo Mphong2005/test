@@ -5,6 +5,7 @@ from bson import ObjectId
 from db.connection import payments_collection, orders_collection
 from db.models.payment import Payment, PaymentStatus, PaymentMethod
 from utils.mongo_parser import parse_mongo_document
+from utils.timezone_utils import get_vietnam_now
 
 
 class PaymentService:
@@ -38,8 +39,8 @@ class PaymentService:
             amount=amount,
             method=method,
             status=status,
-            created_at=datetime.now(),
-            updated_at=datetime.now()
+            created_at=get_vietnam_now(),
+            updated_at=get_vietnam_now()
         )
         result = self.collection.insert_one(payment.to_mongo())
         payment.payment_id = result.inserted_id
@@ -99,7 +100,7 @@ class PaymentService:
 
         self.collection.update_one(
             {'_id': payment.id},
-            {'$set': {'status': PaymentStatus.PAID.value, 'updatedAt': datetime.now()}}
+            {'$set': {'status': PaymentStatus.PAID.value, 'updatedAt': get_vietnam_now()}}
         )
         updated = self.find_by_id(payment_id)
         return self._to_dict(updated)
@@ -112,7 +113,7 @@ class PaymentService:
 
         self.collection.update_one(
             {'_id': payment.id},
-            {'$set': {'status': PaymentStatus.FAILED.value, 'updatedAt': datetime.now()}}
+            {'$set': {'status': PaymentStatus.FAILED.value, 'updatedAt': get_vietnam_now()}}
         )
         updated = self.find_by_id(payment_id)
         return self._to_dict(updated)
@@ -137,7 +138,7 @@ class PaymentService:
         # Cập nhật payment status + timestamp
         self.collection.update_one(
             {'_id': payment.id},
-            {'$set': {'status': PaymentStatus.REFUNDED.value, 'updatedAt': datetime.now()}}
+            {'$set': {'status': PaymentStatus.REFUNDED.value, 'updatedAt': get_vietnam_now()}}
         )
 
         # Cập nhật đơn hàng: đánh dấu đã hoàn tiền
@@ -146,8 +147,8 @@ class PaymentService:
             {'$set': {
                 'refunded': True,
                 'refunded_amount': float(payment.amount),
-                'refund_at': datetime.now(),
-                'updatedAt': datetime.now()
+                'refund_at': get_vietnam_now(),
+                'updatedAt': get_vietnam_now()
             }}
         )
 

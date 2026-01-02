@@ -110,6 +110,18 @@ class RestaurantService:
             print(f"Error finding restaurant by id: {e}")
             return None
 
+    def find_by_ids(self, restaurant_ids: List) -> List[Restaurant]:
+        """Tìm nhiều nhà hàng theo IDs - Batch lookup (1 query)"""
+        try:
+            if not restaurant_ids:
+                return []
+            object_ids = [ObjectId(rid) if not isinstance(rid, ObjectId) else rid for rid in restaurant_ids]
+            docs = self.collection.find({'_id': {'$in': object_ids}})
+            return [self._to_model(doc) for doc in docs]
+        except Exception as e:
+            print(f"Error finding restaurants by ids: {e}")
+            return []
+
     def find_all(self) -> List[Restaurant]:
         """Lấy tất cả nhà hàng - Trả về List Model"""
         try:

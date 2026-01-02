@@ -3,13 +3,15 @@ import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { UserFormData } from '../../types/admin';
 import {
-    FormErrors,
     isValidEmail,
     isValidPhone,
     validatePassword,
     validateName,
     validateDob
 } from '../../utils';
+
+// Type for form validation errors
+type FormErrors = Record<string, string>;
 import { AlertCircle } from 'lucide-react';
 
 interface UserFormModalProps {

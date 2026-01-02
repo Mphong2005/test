@@ -35,23 +35,32 @@ export function transformOrderData(order: any): Order {
         ? items.map((item: any) => `${item.food_name} x${item.quantity}`).join(', ')
         : 'Không có thông tin món';
 
-    // Parse date - Fix timezone issue
+    // Parse date - Backend lưu UTC, frontend convert sang Vietnam time (UTC+7)
+    // Dùng JavaScript Date để parse và convert timezone tự động
     let orderTime = '';
     const dateStr = order.createdAt || order.created_at;
     if (dateStr) {
         try {
-            // Parse date string and convert to local time
+            // Parse date string - JavaScript sẽ tự động hiểu timezone từ ISO/RFC format
             const date = new Date(dateStr);
-            // Format: "HH:mm:ss dd/MM/yyyy"
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const seconds = String(date.getSeconds()).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            orderTime = `Đặt lúc ${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
+            if (!isNaN(date.getTime())) {
+                // Format sang Vietnam timezone
+                const vietnamTime = date.toLocaleString('vi-VN', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour12: false
+                });
+                orderTime = `Đặt lúc ${vietnamTime}`;
+            } else {
+                orderTime = `Đặt lúc ${dateStr}`;
+            }
         } catch {
-            orderTime = dateStr;
+            orderTime = `Đặt lúc ${dateStr}`;
         }
     }
 

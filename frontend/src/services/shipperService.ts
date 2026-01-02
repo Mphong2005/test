@@ -5,6 +5,7 @@
  */
 
 import { OrderStatus, ShipperOrder, ShipperProfile } from '../types/shipper';
+import { formatDateVN, formatDateISO } from '../utils/formatters';
 
 /**
  * Map backend order status to frontend OrderStatus
@@ -23,21 +24,50 @@ export function mapShipperOrderStatus(status: string): OrderStatus {
  * Transform backend order data to ShipperOrder format
  */
 export function transformToShipperOrder(order: any): ShipperOrder {
-    // Format time from ISO string to "HH:mm - DD/MM/YYYY"
-    let timeDisplay = '';
-    const dateStr = order.createdAt || order.created_at;
-    if (dateStr) {
+    const status = order.status || 'PENDING';
+
+    // Helper function to format date to Vietnam time
+    const formatToVietnamTime = (dateStr: string): string => {
+        if (!dateStr) return '';
         try {
             const date = new Date(dateStr);
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            timeDisplay = `${hours}:${minutes} - ${day}/${month}/${year}`;
+            if (isNaN(date.getTime())) return dateStr;
+
+            const time = date.toLocaleTimeString('vi-VN', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            const dateFormatted = date.toLocaleDateString('vi-VN', {
+                timeZone: 'Asia/Ho_Chi_Minh',
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+            return `${time} - ${dateFormatted}`;
         } catch {
-            timeDisplay = dateStr;
+            return dateStr;
         }
+    };
+
+    // Thời gian đặt đơn (luôn là createdAt)
+    const orderTimeStr = order.createdAt || order.created_at || '';
+    const orderTime = formatToVietnamTime(orderTimeStr);
+
+    // Thời gian hiển thị:
+    // - Đơn COMPLETED: dùng updatedAt (thời gian giao xong)
+    // - Đơn khác: dùng createdAt (thời gian đặt)
+    let timeDisplay = '';
+    const statusLower = status?.toLowerCase() || '';
+    const isCompleted = statusLower === 'completed';
+
+    if (isCompleted) {
+        const deliveryTimeStr = order.updatedAt || order.updated_at || orderTimeStr;
+        timeDisplay = formatToVietnamTime(deliveryTimeStr);
+        console.log('[DEBUG] Completed order:', order._id, 'status:', status, 'createdAt:', orderTimeStr, 'updatedAt:', order.updatedAt, 'display:', timeDisplay);
+    } else {
+        timeDisplay = orderTime;
     }
 
     // Transform items
@@ -68,7 +98,8 @@ export function transformToShipperOrder(order: any): ShipperOrder {
         deliveryAddress: order.address || '',
         status: mapShipperOrderStatus(order.status || 'PENDING'),
         paymentMethod: (order.paymentMethod || order.payment_method || 'Cash') === 'COD' ? 'Cash' : 'Wallet',
-        time: timeDisplay,
+        time: timeDisplay, // Thời gian giao (cho completed) hoặc thời gian đặt (cho pending/shipping)
+        orderTime: orderTime, // Thời gian đặt đơn (luôn có)
         totalAmount: order.total_amount || order.totalAmount || 0,
         items,
         customer,
@@ -86,42 +117,20 @@ export function transformShipperOrders(orders: any[]): ShipperOrder[] {
  * Transform backend user data to ShipperProfile format
  */
 export function transformToShipperProfile(user: any): ShipperProfile {
-    // Format created_at date for display (DD/MM/YYYY)
-    let joinDate = '';
+    // Format created_at date for display (DD/MM/YYYY) using timezone-safe formatter
     const createdAt = user.created_at || user.createdAt;
-    if (createdAt) {
-        try {
-            const date = new Date(createdAt);
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            joinDate = `${day}/${month}/${year}`;
-        } catch {
-            joinDate = createdAt;
-        }
-    }
+    const joinDate = formatDateVN(createdAt);
 
-    // Format birthday for date input (YYYY-MM-DD)
-    let dob = '';
+    // Format birthday for date input (YYYY-MM-DD) using timezone-safe formatter
     const birthday = user.birthday || user.dob;
-    if (birthday) {
-        try {
-            const date = new Date(birthday);
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            dob = `${year}-${month}-${day}`;
-        } catch {
-            dob = birthday;
-        }
-    }
+    const dob = formatDateISO(birthday);
 
     return {
         name: user.fullname || 'Shipper',
         email: user.email || '',
         avatar: user.avatar || 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?w=400&q=60',
         rank: 'Tài xế 5 sao', // Default rank since backend doesn't have this field
-        joinDate: joinDate,
+        joinDate: joinDate !== 'Chưa cập nhật' ? joinDate : '',
         phone: user.phone_number || '',
         address: user.address || 'Hà Nội',
         dob: dob,

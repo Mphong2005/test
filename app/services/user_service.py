@@ -57,6 +57,22 @@ class UserService:
             print(f"Error finding user by id: {e}")
             return None
     
+    def find_by_ids(self, user_ids: List) -> List[User]:
+        """Tìm nhiều users theo IDs - Batch lookup (1 query)"""
+        try:
+            if not user_ids:
+                return []
+            object_ids = [ObjectId(uid) if not isinstance(uid, ObjectId) else uid for uid in user_ids]
+            docs = self.collection.find({'_id': {'$in': object_ids}})
+            result = []
+            for doc in docs:
+                doc = parse_mongo_document(doc)
+                result.append(User(**doc))
+            return result
+        except Exception as e:
+            print(f"Error finding users by ids: {e}")
+            return []
+    
     def find_by_email(self, email: str) -> Optional[User]:
         """Tìm user theo email"""
         try:

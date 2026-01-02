@@ -179,6 +179,7 @@ class OrderSimpleResponse(BaseModel):
     refunded_amount: float = 0
     refund_at: Optional[datetime] = None
     created_at: datetime = Field(..., alias="createdAt")
+    updated_at: datetime = Field(..., alias="updatedAt")  # Thời gian cập nhật cuối (delivery time khi completed)
     # Thông tin shipper bổ sung (nếu có)
     shipper: Optional[dict] = None
 

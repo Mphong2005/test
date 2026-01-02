@@ -36,7 +36,8 @@ export interface ShipperOrder {
   deliveryAddress: string;
   status: OrderStatus;
   paymentMethod: 'Cash' | 'Wallet';
-  time: string;
+  time: string; // Thời gian giao (completed) hoặc thời gian đặt (pending/shipping)
+  orderTime?: string; // Thời gian đặt đơn (luôn là createdAt)
   totalAmount: number;
   items: OrderItem[];
   customer?: ShipperCustomer;

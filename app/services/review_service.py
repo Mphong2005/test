@@ -6,6 +6,7 @@ from db.connection import reviews_collection, orders_collection, restaurants_col
 from db.models.review import Review
 from db.models.order import OrderStatus
 from utils.mongo_parser import parse_mongo_document
+from utils.timezone_utils import get_vietnam_now
 
 
 class ReviewService:
@@ -66,8 +67,8 @@ class ReviewService:
             restaurant_id=order['restaurantId'],
             rating=rating,
             comment=comment,
-            created_at=datetime.now(),
-            updated_at=datetime.now()
+            created_at=get_vietnam_now(),
+            updated_at=get_vietnam_now()
         )
         
         result = self.collection.insert_one(review.to_mongo())
@@ -76,7 +77,7 @@ class ReviewService:
         # Cập nhật order: đánh dấu đã review
         orders_collection.update_one(
             {'_id': ObjectId(order_id)},
-            {'$set': {'isReviewed': True, 'updatedAt': datetime.now()}}
+            {'$set': {'isReviewed': True, 'updatedAt': get_vietnam_now()}}
         )
         
         # Cập nhật rating nhà hàng
@@ -98,7 +99,7 @@ class ReviewService:
         if str(review.user_id) != user_id:
             raise ValueError('Bạn không có quyền chỉnh sửa đánh giá này')
         
-        updates = {'updatedAt': datetime.now()}
+        updates = {'updatedAt': get_vietnam_now()}
         if rating is not None:
             updates['rating'] = rating
         if comment is not None:
@@ -135,7 +136,7 @@ class ReviewService:
         if order_id:
             orders_collection.update_one(
                 {'_id': order_id},
-                {'$set': {'isReviewed': False, 'updatedAt': datetime.now()}}
+                {'$set': {'isReviewed': False, 'updatedAt': get_vietnam_now()}}
             )
         
         # Cập nhật rating nhà hàng

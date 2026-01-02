@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
 from .common import PyObjectId
 from .payment import PaymentMethod
+from utils.timezone_utils import get_utc_now
 
 
 class OrderItemStatus(str, Enum):
@@ -105,8 +106,8 @@ class Order(BaseModel):
     cancellation_reason: Optional[str] = None
     
     # === Thời gian ===
-    created_at: datetime = Field(default_factory=datetime.now, alias="createdAt")
-    updated_at: datetime = Field(default_factory=datetime.now, alias="updatedAt")
+    created_at: datetime = Field(default_factory=get_utc_now, alias="createdAt")
+    updated_at: datetime = Field(default_factory=get_utc_now, alias="updatedAt")
     picked_at: Optional[datetime] = Field(default=None, alias="pickedAt", description="Thời điểm shipper nhận đơn")
 
     class Config:

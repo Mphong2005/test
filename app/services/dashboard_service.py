@@ -1,5 +1,5 @@
 from typing import List, Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 from pymongo.collection import Collection
 
@@ -316,12 +316,25 @@ class DashboardService:
         }
         
         for order in orders:
+            # Format timestamp với UTC timezone info để frontend có thể convert sang Vietnam time
+            updated_at = order.get("updatedAt")
+            if isinstance(updated_at, datetime):
+                # Nếu datetime không có timezone info, giả định là UTC
+                if updated_at.tzinfo is None:
+                    updated_at = updated_at.replace(tzinfo=timezone.utc)
+                timestamp_str = updated_at.isoformat()
+            elif isinstance(updated_at, str):
+                # Nếu là string và không có timezone info, thêm +00:00
+                timestamp_str = updated_at if '+' in updated_at or 'Z' in updated_at else f"{updated_at}+00:00"
+            else:
+                timestamp_str = datetime.now(timezone.utc).isoformat()
+            
             activities.append(
                 RecentActivity(
                     orderId=f"#ORD-{str(order['_id'])[-4:]}",
                     userName=order.get("user", {}).get("fullname", "Unknown"),
                     status=order.get("status", "Unknown"),
-                    timestamp=order.get("updatedAt", datetime.now()).isoformat() if isinstance(order.get("updatedAt"), datetime) else str(order.get("updatedAt", "")),
+                    timestamp=timestamp_str,
                     type=type_map.get(order.get("status"), "Unknown")
                 ).model_dump(by_alias=True)
             )
