@@ -6,6 +6,8 @@ import { FoodItem, UserProfile, Voucher } from '../../types/common';
 import { getAvailableVouchersForUserApi } from '../../api/voucherApi';
 import { createOrderApi } from '../../api/orderApi';
 import { getUserProfileApi } from '../../api/userApi';
+import { topUpBalanceApi } from '../../api/userApi';
+import { getFoodsApi } from '../../api/productApi';
 import { useAuthContext } from '../../contexts/AuthContext';
 import { PasswordModal } from '../../components/common/PasswordModal';
 import { OrderSuccessModal } from '../../components/user/OrderSuccessModal';
@@ -41,6 +43,16 @@ export const CheckoutPage: React.FC = () => {
       return [{ food: state.food, quantity: state.quantity || 1 }];
     }
     return [{ food: DEFAULT_FOOD, quantity: 1 }];
+  });
+
+  // Lưu restaurantId ban đầu để không mất khi giỏ trống
+  const [initialRestaurantId] = useState<string>(() => {
+    if (state?.items && state.items.length > 0) {
+      return state.items[0].food.restaurantId;
+    } else if (state?.food) {
+      return state.food.restaurantId;
+    }
+    return 'res-1';
   });
 
   useEffect(() => {
@@ -94,6 +106,11 @@ export const CheckoutPage: React.FC = () => {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Top-up modal
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [showTopUpPasswordModal, setShowTopUpPasswordModal] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState<string>('');
 
   // Fetch vouchers
   useEffect(() => {
@@ -141,10 +158,35 @@ export const CheckoutPage: React.FC = () => {
     setCartItems(prev => prev.filter(item => item.food.id !== foodId));
   };
 
+  const updateItemQuantity = (foodId: string, newQuantity: number) => {
+    if (newQuantity < 1) return; // Minimum quantity is 1
+    setCartItems(prev => 
+      prev.map(item => 
+        item.food.id === foodId 
+          ? { ...item, quantity: newQuantity }
+          : item
+      )
+    );
+  };
+
   // Submit order
   const submitOrder = async (skipVoucher: boolean = false) => {
     if (cartItems.length === 0) {
       alert('Vui lòng chọn ít nhất một món ăn');
+      return;
+    }
+
+    // Validate phone number
+    if (!userProfile.phone || userProfile.phone.trim() === '' || userProfile.phone === 'N/A') {
+      alert('Vui lòng cập nhật số điện thoại trong trang cá nhân trước khi đặt hàng!');
+      setIsProcessing(false);
+      return;
+    }
+
+    // Validate address
+    if (!userProfile.address || userProfile.address.trim() === '' || userProfile.address === 'Đang cập nhật địa chỉ') {
+      alert('Vui lòng cập nhật địa chỉ giao hàng trong trang cá nhân trước khi đặt hàng!');
+      setIsProcessing(false);
       return;
     }
 
@@ -217,13 +259,70 @@ export const CheckoutPage: React.FC = () => {
     }
   };
 
+  // Top-up handlers
+  const handleOpenTopUpModal = () => {
+    setTopUpAmount('');
+    setShowTopUpModal(true);
+  };
+
+  const handleTopUpConfirm = () => {
+    const amount = parseFloat(topUpAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert('Vui lòng nhập số tiền hợp lệ!');
+      return;
+    }
+    setShowTopUpModal(false);
+    setShowTopUpPasswordModal(true);
+  };
+
+  const handleTopUpPasswordConfirm = async (password: string) => {
+    try {
+      const amount = parseFloat(topUpAmount);
+      if (isNaN(amount) || amount <= 0) {
+        alert('Vui lòng nhập số tiền hợp lệ!');
+        return;
+      }
+
+      // Call API to top up balance
+      const updatedUser = await topUpBalanceApi(amount);
+
+      // Update local state with new balance
+      setUserProfile(prev => ({
+        ...prev,
+        balance: updatedUser.balance || prev.balance + amount
+      }));
+
+      setShowTopUpPasswordModal(false);
+      setTopUpAmount('');
+      alert(`Nạp tiền thành công! Số dư mới: ${formatNumber(updatedUser.balance || userProfile.balance + amount)}đ`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      alert(`Lỗi nạp tiền: ${errorMessage}`);
+      setShowTopUpPasswordModal(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 animate-in fade-in duration-500 relative bg-white pb-24">
       {/* Breadcrumb */}
       <nav className="text-xs font-medium text-gray-400 flex items-center gap-2 mb-8 select-none">
         <button onClick={() => navigate('/')} className="hover:text-[#EE501C] transition-colors">Trang chủ</button>
         <ChevronRight className="w-3 h-3" />
-        <button onClick={() => navigate(-1)} className="hover:text-[#EE501C] transition-colors">Món yêu thích</button>
+        <button 
+          onClick={() => {
+            // Navigate back with updated cartItems
+            if (cartItems.length > 0) {
+              navigate(`/product/${cartItems[0]?.food?.id || ''}`, {
+                state: { fromCheckout: true, currentCartItems: cartItems }
+              });
+            } else {
+              navigate(-1);
+            }
+          }} 
+          className="hover:text-[#EE501C] transition-colors"
+        >
+          Món yêu thích
+        </button>
         <ChevronRight className="w-3 h-3" />
         <span className="text-gray-800 font-semibold">Chi tiết thanh toán</span>
       </nav>
@@ -259,10 +358,29 @@ export const CheckoutPage: React.FC = () => {
                 <Ticket className="w-5 h-5" /> Món đã chọn
               </div>
               <button
-                onClick={() => {
-                  navigate(`/product/${cartItems[0]?.food?.id || ''}#related-foods`, {
-                    state: { fromCheckout: true, currentCartItems: cartItems, restaurantId }
-                  });
+                onClick={async () => {
+                  // Nếu giỏ trống, lấy món đầu tiên của quán
+                  if (cartItems.length === 0) {
+                    try {
+                      const allFoods = await getFoodsApi();
+                      const restaurantFoods = allFoods.filter(f => f.restaurantId === initialRestaurantId);
+                      const firstFood = restaurantFoods[0];
+                      if (firstFood) {
+                        navigate(`/product/${firstFood.id}#related-foods`, {
+                          state: { fromCheckout: true, currentCartItems: [], restaurantId: initialRestaurantId }
+                        });
+                      } else {
+                        navigate('/');
+                      }
+                    } catch (error) {
+                      console.error('Failed to get foods:', error);
+                      navigate('/');
+                    }
+                  } else {
+                    navigate(`/product/${cartItems[0]?.food?.id || ''}#related-foods`, {
+                      state: { fromCheckout: true, currentCartItems: cartItems, restaurantId }
+                    });
+                  }
                 }}
                 className="text-xs font-bold flex items-center gap-1.5 text-gray-500 hover:text-[#EE501C] hover:bg-orange-50 px-3 py-1.5 rounded-full transition-all"
               >
@@ -301,7 +419,22 @@ export const CheckoutPage: React.FC = () => {
                       <p className="text-xs text-gray-400 mb-2">Quán Ngon Nhà Làm</p>
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-bold text-[#EE501C]">{formatNumber(item.food.price)}đ</span>
-                        <span className="text-sm font-bold text-gray-800 bg-gray-50 px-3 py-1 rounded-lg">x{item.quantity}</span>
+                        <div className="flex items-center gap-2 bg-gray-50 rounded-lg">
+                          <button
+                            onClick={() => updateItemQuantity(item.food.id, item.quantity - 1)}
+                            className="w-7 h-7 flex items-center justify-center text-gray-600 hover:text-[#EE501C] transition-colors rounded-l-lg hover:bg-orange-50"
+                            disabled={item.quantity <= 1}
+                          >
+                            <span className="text-lg font-bold">−</span>
+                          </button>
+                          <span className="text-sm font-bold text-gray-800 min-w-[2rem] text-center">{item.quantity}</span>
+                          <button
+                            onClick={() => updateItemQuantity(item.food.id, item.quantity + 1)}
+                            className="w-7 h-7 flex items-center justify-center text-gray-600 hover:text-[#EE501C] transition-colors rounded-r-lg hover:bg-orange-50"
+                          >
+                            <span className="text-lg font-bold">+</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -434,11 +567,13 @@ export const CheckoutPage: React.FC = () => {
               </div>
 
               <button
-                onClick={handleConfirmClick}
-                disabled={(paymentMethod === 'wallet' && userProfile.balance < total) || isProcessing}
-                className={`w-full text-white font-bold py-4 rounded-2xl shadow-xl transform active:scale-95 transition-all mt-4 flex items-center justify-center gap-2 ${(paymentMethod === 'wallet' && userProfile.balance < total) || isProcessing
+                onClick={paymentMethod === 'wallet' && userProfile.balance < total ? handleOpenTopUpModal : handleConfirmClick}
+                disabled={isProcessing}
+                className={`w-full text-white font-bold py-4 rounded-2xl shadow-xl transform active:scale-95 transition-all mt-4 flex items-center justify-center gap-2 ${isProcessing
                   ? 'bg-gray-300 cursor-not-allowed shadow-none'
-                  : 'bg-[#EE501C] hover:bg-[#d44719] shadow-orange-100'
+                  : paymentMethod === 'wallet' && userProfile.balance < total
+                    ? 'bg-blue-500 hover:bg-blue-600 shadow-blue-100'
+                    : 'bg-[#EE501C] hover:bg-[#d44719] shadow-orange-100'
                   }`}
               >
                 {isProcessing ? (
@@ -447,7 +582,7 @@ export const CheckoutPage: React.FC = () => {
                   </>
                 ) : (
                   paymentMethod === 'wallet' && userProfile.balance < total
-                    ? 'Số dư không đủ'
+                    ? `Nạp thêm ${formatNumber(total - userProfile.balance)}đ`
                     : 'Xác nhận thanh toán'
                 )}
               </button>
@@ -463,6 +598,49 @@ export const CheckoutPage: React.FC = () => {
         onConfirm={handlePasswordConfirm}
         isProcessing={isProcessing}
       />
+
+      <PasswordModal
+        isOpen={showTopUpPasswordModal}
+        onClose={() => setShowTopUpPasswordModal(false)}
+        onConfirm={handleTopUpPasswordConfirm}
+        isProcessing={false}
+      />
+
+      {/* Top-up Modal */}
+      {showTopUpModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <h2 className="text-2xl font-black text-gray-800 mb-2">Nạp tiền vào ví</h2>
+            <p className="text-sm text-gray-500 mb-6">
+              Số dư hiện tại: <span className="font-bold text-[#EE501C]">{formatNumber(userProfile.balance)}đ</span>
+              <br />
+              Cần thêm: <span className="font-bold text-blue-600">{formatNumber(Math.max(0, total - userProfile.balance))}đ</span>
+            </p>
+            <input
+              type="number"
+              value={topUpAmount}
+              onChange={(e) => setTopUpAmount(e.target.value)}
+              placeholder="Nhập số tiền muốn nạp"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-[#EE501C] transition-colors mb-6"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowTopUpModal(false)}
+                className="flex-1 px-6 py-3 border-2 border-gray-200 text-gray-600 font-bold rounded-2xl hover:bg-gray-50 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleTopUpConfirm}
+                className="flex-1 px-6 py-3 bg-[#EE501C] text-white font-bold rounded-2xl hover:bg-[#d44719] transition-colors shadow-lg shadow-orange-100"
+              >
+                Xác nhận
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <OrderSuccessModal isOpen={showSuccessModal} />
     </div>

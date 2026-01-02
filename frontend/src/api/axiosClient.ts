@@ -7,7 +7,7 @@ import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } fro
 import { getToken, removeItem, STORAGE_KEYS } from '../utils/storage';
 import { refreshAccessToken } from '../services/authService';
 
-const DEFAULT_BACKEND_URL = 'https://fooddelivery-t9qs.onrender.com';
+const DEFAULT_BACKEND_URL = 'http://127.0.0.1:5000';
 
 const normalizeUrl = (raw?: string) => {
   if (!raw || typeof raw !== 'string') {
@@ -31,6 +31,7 @@ type ApiEnvelope = {
 
 // Create Axios instance
 export const apiClient = axios.create({
+  baseURL: getBackendBaseUrl(),
   timeout: 15000, // 15 seconds timeout
   headers: {
     'Content-Type': 'application/json',
@@ -40,7 +41,6 @@ export const apiClient = axios.create({
 // Request Interceptor - Tự động thêm token vào mọi request
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    config.baseURL = getBackendBaseUrl();
     const token = getToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -114,7 +114,6 @@ apiClient.interceptors.response.use(
             return Promise.reject(err);
           });
       }
-
 
       originalRequest._retry = true;
       isRefreshing = true;

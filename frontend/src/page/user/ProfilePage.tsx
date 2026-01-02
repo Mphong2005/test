@@ -195,10 +195,13 @@ export const ProfilePage: React.FC = () => {
         'other': undefined
       };
 
+      // Strip phone number to only digits for backend validation
+      const phoneDigits = formPhone.replace(/\D/g, '');
+
       await updateUserApi({
         fullname: formName,
         email: formEmail,
-        phone_number: formPhone,
+        phone_number: phoneDigits || undefined,
         address: formAddress,
         birthday: dob ? new Date(dob).toISOString() : undefined,
         gender: genderMap[gender]

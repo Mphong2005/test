@@ -25,17 +25,38 @@ export const ProductDetailPage: React.FC = () => {
   const [relatedFoods, setRelatedFoods] = useState<FoodItem[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [restaurantRating, setRestaurantRating] = useState<number>(0);
+  const [restaurantReviewCount, setRestaurantReviewCount] = useState<number>(0);
+  
+  // Cart items state - CẦN DÙNG STATE ĐỂ CẬP NHẬT KHI QUAY LẠI TỪ CHECKOUT
+  const locationState = location.state as any;
+  const [cartItems, setCartItems] = useState<Array<{ food: FoodItem, quantity: number }>>(
+    locationState?.currentCartItems || []
+  );
+  
+  // Cập nhật cartItems khi location.state thay đổi (quay lại từ checkout)
+  useEffect(() => {
+    if (locationState?.currentCartItems) {
+      setCartItems(locationState.currentCartItems);
+    }
+  }, [JSON.stringify(locationState?.currentCartItems)]); // stringify để so sánh deep
+  
+  const cartItemCount = cartItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
+  const cartTotal = cartItems.reduce((sum: number, item: any) => sum + (item.food.price * item.quantity), 0);
+  
+  // Carousel state for related foods
+  const [currentPage, setCurrentPage] = useState(0);
+  const itemsPerPage = 4;
+  const totalPages = Math.ceil(relatedFoods.length / itemsPerPage);
+  const displayedFoods = relatedFoods.slice(currentPage * itemsPerPage, (currentPage + 1) * itemsPerPage);
 
   // Login Modal State
   const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // Reset quantity to 1 when coming from checkout
+  // Reset quantity to 1 when food ID changes
   useEffect(() => {
-    const locationState = location.state as any;
-    if (locationState?.fromCheckout) {
-      setQuantity(1); // Always reset to 1 when adding from checkout
-    }
-  }, [location.state, id]); // Also reset when food ID changes
+    setQuantity(1); // Always reset to 1 when viewing a new food item
+  }, [id]); // Reset whenever food ID changes
 
   useEffect(() => {
     const fetchData = async () => {
@@ -62,6 +83,12 @@ export const ProductDetailPage: React.FC = () => {
           // 3. Fetch Reviews for this food
           const reviewsData = await getReviewsByFoodIdApi(id);
           setReviews(reviewsData);
+          
+          // Store current food rating for restaurant calculation
+          const currentFoodReviewCount = reviewsData.length;
+          const currentFoodRating = currentFoodReviewCount > 0
+            ? Number((reviewsData.reduce((acc, r) => acc + r.rating, 0) / currentFoodReviewCount).toFixed(1))
+            : 0;
 
           // 4. Fetch Restaurant & Related Foods
           if (foodData && foodData.restaurantId) {
@@ -101,25 +128,116 @@ export const ProductDetailPage: React.FC = () => {
                       });
                       console.log('Added related food:', item.name);
 
-                      // Limit to 4 items
-                      if (related.length >= 4) break;
+                      // No limit - get all foods from the restaurant
                     }
                   }
-                  if (related.length >= 4) break;
                 }
               }
 
               console.log('Total related foods found:', related.length);
-              setRelatedFoods(related);
+              
+              // Fetch reviews for all related foods to get actual ratings
+              const relatedWithRatings = await Promise.all(
+                related.map(async (food) => {
+                  try {
+                    const foodReviews = await getReviewsByFoodIdApi(food.id);
+                    const reviewCount = foodReviews.length;
+                    const averageRating = reviewCount > 0
+                      ? Number((foodReviews.reduce((acc, r) => acc + r.rating, 0) / reviewCount).toFixed(1))
+                      : 0;
+                    return {
+                      ...food,
+                      rating: averageRating,
+                      reviewCount: reviewCount,
+                    };
+                  } catch (error) {
+                    console.error(`Error fetching reviews for ${food.id}:`, error);
+                    return {
+                      ...food,
+                      rating: 0,
+                      reviewCount: 0,
+                    };
+                  }
+                })
+              );
+              
+              setRelatedFoods(relatedWithRatings);
+              
+              // Calculate restaurant rating from ALL foods (current food + related foods)
+              // Use already fetched current food reviews
+              // Calculate average rating of all foods (simple average, not weighted)
+              const allFoodsWithRatings = [
+                { rating: currentFoodRating, reviewCount: currentFoodReviewCount },
+                ...relatedWithRatings.map(f => ({ rating: f.rating, reviewCount: f.reviewCount || 0 }))
+              ];
+              
+              // Filter out foods with no reviews (rating = 0 and reviewCount = 0)
+              const foodsWithReviews = allFoodsWithRatings.filter(f => f.reviewCount > 0);
+              
+              const totalReviewCount = allFoodsWithRatings.reduce((sum, f) => sum + f.reviewCount, 0);
+              
+              // Simple average of food ratings (not weighted by review count)
+              const restaurantAvgRating = foodsWithReviews.length > 0
+                ? Number((foodsWithReviews.reduce((sum, f) => sum + f.rating, 0) / foodsWithReviews.length).toFixed(1))
+                : 0;
+              
+              setRestaurantRating(restaurantAvgRating);
+              setRestaurantReviewCount(totalReviewCount);
             } else {
               console.log('Menu not available, using fallback API');
               // Fallback: Fetch related foods from API if menu is not available
               const allFoods = await getFoodsApi();
               const related = allFoods
-                .filter(f => f.restaurantId === foodData.restaurantId && f.id !== id)
-                .slice(0, 4);
+                .filter(f => f.restaurantId === foodData.restaurantId && f.id !== id);
               console.log('Fallback related foods:', related.length);
-              setRelatedFoods(related);
+              
+              // Fetch reviews for all related foods to get actual ratings
+              const relatedWithRatings = await Promise.all(
+                related.map(async (food) => {
+                  try {
+                    const foodReviews = await getReviewsByFoodIdApi(food.id);
+                    const reviewCount = foodReviews.length;
+                    const averageRating = reviewCount > 0
+                      ? Number((foodReviews.reduce((acc, r) => acc + r.rating, 0) / reviewCount).toFixed(1))
+                      : 0;
+                    return {
+                      ...food,
+                      rating: averageRating,
+                      reviewCount: reviewCount,
+                    };
+                  } catch (error) {
+                    console.error(`Error fetching reviews for ${food.id}:`, error);
+                    return {
+                      ...food,
+                      rating: food.rating || 0,
+                      reviewCount: 0,
+                    };
+                  }
+                })
+              );
+              
+              setRelatedFoods(relatedWithRatings);
+              
+              // Calculate restaurant rating from ALL foods (current food + related foods)
+              // Use already fetched current food reviews
+              // Calculate average rating of all foods (simple average, not weighted)
+              const allFoodsWithRatings = [
+                { rating: currentFoodRating, reviewCount: currentFoodReviewCount },
+                ...relatedWithRatings.map(f => ({ rating: f.rating, reviewCount: f.reviewCount || 0 }))
+              ];
+              
+              // Filter out foods with no reviews (rating = 0 and reviewCount = 0)
+              const foodsWithReviews = allFoodsWithRatings.filter(f => f.reviewCount > 0);
+              
+              const totalReviewCount = allFoodsWithRatings.reduce((sum, f) => sum + f.reviewCount, 0);
+              
+              // Simple average of food ratings (not weighted by review count)
+              const restaurantAvgRating = foodsWithReviews.length > 0
+                ? Number((foodsWithReviews.reduce((sum, f) => sum + f.rating, 0) / foodsWithReviews.length).toFixed(1))
+                : 0;
+              
+              setRestaurantRating(restaurantAvgRating);
+              setRestaurantReviewCount(totalReviewCount);
             }
           }
         }
@@ -191,19 +309,21 @@ export const ProductDetailPage: React.FC = () => {
     const locationState = location.state as any;
     if (locationState?.fromCheckout && locationState?.currentCartItems) {
       // Add current food to existing cart
-      // When adding from checkout, always add quantity = 1 (not the current quantity state)
       const existingItems = locationState.currentCartItems || [];
       const existingIndex = existingItems.findIndex((item: any) => item.food.id === food.id);
 
       let updatedItems;
       if (existingIndex >= 0) {
-        // Item already exists: increase quantity by 1
+        // Item already exists: CỘNG thêm số lượng
         updatedItems = [...existingItems];
-        updatedItems[existingIndex].quantity += 1;
+        updatedItems[existingIndex].quantity += quantity; // CỘNG thêm
+        // Move to front to show it first
+        const item = updatedItems.splice(existingIndex, 1)[0];
+        updatedItems.unshift(item);
       } else {
-        // New item: add with quantity = 1 (always 1 when adding from checkout)
+        // New item: add with current quantity from state
         // Add new item to the beginning so it shows first
-        updatedItems = [{ food, quantity: 1 }, ...existingItems];
+        updatedItems = [{ food, quantity: quantity }, ...existingItems];
       }
 
       // Navigate back to checkout with updated items
@@ -297,12 +417,12 @@ export const ProductDetailPage: React.FC = () => {
               <div className="flex items-center gap-1 text-[11px] text-gray-400 mb-1 mt-1">
                 <MapPin className="w-3 h-3" /> {displayRestaurant.address}
               </div>
-              {/* Updated Rating Section: Clickable and uses real calculated data */}
+              {/* Updated Rating Section: Clickable and uses restaurant rating (average of all foods) */}
               <div
                 onClick={handleViewReviews}
                 className="flex items-center gap-1 text-[11px] text-[#EE501C] font-bold cursor-pointer hover:underline"
               >
-                <Star className="w-3 h-3 fill-[#EE501C]" /> {averageRating} <span className="text-gray-400 font-medium">({totalReviews} đánh giá)</span>
+                <Star className="w-3 h-3 fill-[#EE501C]" /> {restaurantRating > 0 ? restaurantRating.toFixed(1) : '0.0'} <span className="text-gray-400 font-medium">({restaurantReviewCount} đánh giá)</span>
               </div>
             </div>
           </div>
@@ -441,51 +561,76 @@ export const ProductDetailPage: React.FC = () => {
       <section id="related-foods">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-800">Món ngon khác của quán</h2>
-          <div className="flex gap-2">
-            <button className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-[#EE501C] transition-colors">
-              <ChevronLeft className="w-4 h-4 text-gray-400 hover:text-[#EE501C]" />
-            </button>
-            <button className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-[#EE501C] transition-colors">
-              <ChevronRight className="w-4 h-4 text-gray-400 hover:text-[#EE501C]" />
-            </button>
-          </div>
+          {relatedFoods.length > 4 && (
+            <div className="flex gap-2 items-center">
+              <span className="text-sm text-gray-500">{currentPage + 1}/{totalPages}</span>
+              <button 
+                onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                disabled={currentPage === 0}
+                className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-[#EE501C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4 text-gray-400 hover:text-[#EE501C]" />
+              </button>
+              <button 
+                onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+                disabled={currentPage === totalPages - 1}
+                className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-[#EE501C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="w-4 h-4 text-gray-400 hover:text-[#EE501C]" />
+              </button>
+            </div>
+          )}
         </div>
 
         {relatedFoods.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            {relatedFoods.map((f) => {
+            {displayedFoods.map((f) => {
               // Check if coming from checkout
               const locationState = location.state as any;
               const isFromCheckout = locationState?.fromCheckout && locationState?.currentCartItems;
 
               const handleRelatedFoodClick = async () => {
-                // REMOVED: Logic tự động thêm vào cart (yêu thích) khi click món liên quan
-                // User chỉ muốn xem/đặt món, không muốn tự động thêm vào yêu thích
-                // Nếu muốn thêm vào yêu thích, user phải click nút "Yêu thích" riêng
-
+                // Click vào món → xem chi tiết
                 if (isFromCheckout) {
-                  // Add directly to cart and go back to checkout
+                  // Navigate to product detail with checkout context
+                  navigate(`/product/${f.id}`, {
+                    state: { fromCheckout: true, currentCartItems: locationState.currentCartItems }
+                  });
+                } else {
+                  // Normal flow: navigate to product detail
+                  navigate(`/product/${f.id}`);
+                }
+              };
+
+              const handleAddToCheckout = (e: React.MouseEvent) => {
+                // Ngăn event bubble lên parent (không trigger handleRelatedFoodClick)
+                e.stopPropagation();
+                
+                if (isFromCheckout) {
+                  // Thêm món vào checkout mà không chuyển trang
                   const existingItems = locationState.currentCartItems || [];
                   const existingIndex = existingItems.findIndex((item: any) => item.food.id === f.id);
 
                   let updatedItems;
                   if (existingIndex >= 0) {
-                    // Item already exists: increase quantity by 1
+                    // Món đã có: CỘNG thêm 1 và chuyển lên đầu
                     updatedItems = [...existingItems];
-                    updatedItems[existingIndex].quantity += 1;
-                    // Move to front to show it first
+                    updatedItems[existingIndex].quantity += 1; // CỘNG thêm 1
                     const item = updatedItems.splice(existingIndex, 1)[0];
                     updatedItems.unshift(item);
                   } else {
-                    // New item: add with quantity = 1 at the beginning
+                    // Món mới: thêm vào đầu danh sách với số lượng = 1
                     updatedItems = [{ food: f, quantity: 1 }, ...existingItems];
                   }
 
-                  // Navigate back to checkout with updated items
-                  navigate('/checkout', { state: { items: updatedItems } });
+                  // Cập nhật state và navigate lại checkout với items mới
+                  navigate('/checkout', { 
+                    state: { items: updatedItems },
+                    replace: true // Thay thế history để không tạo entry mới
+                  });
                 } else {
-                  // Normal flow: navigate to product detail
-                  navigate(`/product/${f.id}`);
+                  // Flow bình thường: chuyển đến trang đặt món
+                  navigate('/checkout', { state: { food: f, quantity: 1 } });
                 }
               };
 
@@ -501,13 +646,16 @@ export const ProductDetailPage: React.FC = () => {
                   <div className="p-3 md:p-4">
                     <h4 className="font-bold text-gray-800 truncate mb-1 text-sm md:text-base">{f.name}</h4>
                     <div className="flex items-center gap-1 text-[10px] text-[#EE501C] font-bold mb-2 md:mb-3">
-                      <Star className="w-3 h-3 fill-[#EE501C]" /> {f.rating} <span className="text-gray-300 font-medium">(50+)</span>
+                      <Star className={`w-3 h-3 ${f.rating > 0 ? 'fill-[#EE501C]' : 'fill-none text-gray-300'}`} /> {f.rating > 0 ? f.rating.toFixed(1) : '0.0'} <span className="text-gray-300 font-medium">({f.reviewCount || 0}+)</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-base md:text-lg font-black text-[#EE501C]">{formatNumber(f.price)}đ</span>
-                      <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg md:rounded-xl bg-orange-50 flex items-center justify-center text-[#EE501C] group-hover:bg-[#EE501C] group-hover:text-white transition-colors">
+                      <button
+                        onClick={handleAddToCheckout}
+                        className="w-7 h-7 md:w-8 md:h-8 rounded-lg md:rounded-xl bg-orange-50 flex items-center justify-center text-[#EE501C] hover:bg-[#EE501C] hover:text-white transition-colors"
+                      >
                         <Plus className="w-4 h-4" />
-                      </div>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -526,6 +674,29 @@ export const ProductDetailPage: React.FC = () => {
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
       />
+
+      {/* Floating Cart Button */}
+      {cartItems.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <button
+            onClick={() => navigate('/checkout', { state: { items: cartItems } })}
+            className="bg-[#EE501C] text-white px-6 py-4 rounded-full shadow-2xl hover:bg-[#d44719] transition-all flex items-center gap-3 group animate-in fade-in slide-in-from-bottom-5 duration-500"
+          >
+            <div className="relative">
+              <ShoppingCart className="w-6 h-6" />
+              {cartItemCount > 0 && (
+                <span className="absolute -top-2 -right-2 bg-white text-[#EE501C] text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#EE501C]">
+                  {cartItemCount}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col items-start">
+              <span className="text-xs font-medium opacity-90">Giỏ hàng</span>
+              <span className="text-sm font-bold">{formatNumber(cartTotal)}đ</span>
+            </div>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

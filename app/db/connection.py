@@ -1,13 +1,18 @@
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError, OperationFailure
 from core.config import config
 
-# Khởi tạo MongoDB client
-client = MongoClient(config.MONGO_URI)
+# =========================
+# MongoDB connection
+# =========================
 
-# Chọn database
+client = MongoClient(config.MONGO_URI)
 db = client[config.MONGO_DB_NAME]
 
-# Thêm các collections vào đây
+# =========================
+# Collections
+# =========================
+
 users_collection = db['users']
 restaurants_collection = db['restaurants']
 orders_collection = db['orders']
@@ -16,79 +21,175 @@ vouchers_collection = db['vouchers']
 reviews_collection = db['reviews']
 cart_collection = db['cart']
 
+# =========================
+# Helpers
+# =========================
+
 def get_db():
-    """Trả về database instance"""
     return db
 
 
 def get_collection(collection_name: str):
-    """Lấy collection theo tên"""
     return db[collection_name]
 
 
 def close_connection():
-    """Đóng kết nối MongoDB"""
     client.close()
 
 
 def ping_db():
-    """Kiểm tra kết nối MongoDB"""
     try:
         client.admin.command('ping')
         return True
     except Exception as e:
-        print(f"MongoDB connection failed: {e}")
+        print(f"❌ MongoDB connection failed: {e}")
         return False
 
 
-# Tạo indexes (chạy 1 lần khi khởi động app)
-def init_indexes():
-    """Tạo indexes cho collections"""
+# =========================
+# Index utilities
+# =========================
+
+def index_with_keys_exists(collection, keys) -> bool:
+    """
+    Kiểm tra index đã tồn tại theo KEY (không quan tâm tên)
+    """
+    wanted = dict(keys)
+    for index in collection.index_information().values():
+        if dict(index.get('key', {})) == wanted:
+            return True
+    return False
+
+
+def safe_create_index(collection, keys, **kwargs):
+    """
+    Tạo index an toàn:
+    - Skip nếu index cùng KEY đã tồn tại
+    - Skip nếu dữ liệu trùng (DuplicateKey)
+    - Không throw lỗi làm crash app
+    """
     try:
-        # Index cho users collection
-        users_collection.create_index('email', unique=True)
-        
-        # Index cho restaurants collection
-        # Unique index trên (name, address) combo - enforce logic trùng lặp
-        restaurants_collection.create_index([('name', 1), ('address', 1)], unique=True)
-        
-        # Text index trên tên nhà hàng để hỗ trợ search theo tên
-        restaurants_collection.create_index([('name', 'text')])
-        
-        # Index trên trường lồng nhau menu.items.name để hỗ trợ tìm món theo tên
-        restaurants_collection.create_index('menu.items.name')
-        
-        # Index cho orders collection
-        orders_collection.create_index('userId')
-        orders_collection.create_index('restaurantId')
-        orders_collection.create_index('shipperId')
-        orders_collection.create_index('status')
-        orders_collection.create_index([('userId', 1), ('createdAt', -1)])  # User orders sorted by date
-        orders_collection.create_index([('restaurantId', 1), ('createdAt', -1)])  # Restaurant orders
-        orders_collection.create_index([('shipperId', 1), ('createdAt', -1)])  # Shipper orders
-        orders_collection.create_index([('status', 1), ('createdAt', -1)])  # Pending orders query
+        if index_with_keys_exists(collection, keys):
+            return
 
-        # Index cho payments collection
-        payments_collection.create_index('orderId')
-        payments_collection.create_index('userId')
-        payments_collection.create_index('status')
-        payments_collection.create_index([('userId', 1), ('createdAt', -1)])
+        collection.create_index(keys, **kwargs)
 
-        # Index cho vouchers collection
-        vouchers_collection.create_index('code', unique=True)
-        vouchers_collection.create_index('active')
-        vouchers_collection.create_index('restaurantId')
-        
-        # Index cho reviews collection
-        reviews_collection.create_index('orderId', unique=True)  # 1 review per order
-        reviews_collection.create_index('userId')
-        reviews_collection.create_index('restaurantId')
-        reviews_collection.create_index([('restaurantId', 1), ('createdAt', -1)])  # Restaurant reviews sorted
-        reviews_collection.create_index([('userId', 1), ('createdAt', -1)])  # User reviews sorted
-        
-        # Index cho cart collection
-        cart_collection.create_index('userId', unique=True)  # 1 cart per user
-        
-        print("MongoDB indexes created successfully")
+    except DuplicateKeyError:
+        print(f"⚠️  Skip index (duplicate data): {collection.name} | {keys}")
+
+    except OperationFailure as e:
+        # IndexOptionsConflict → index đã tồn tại nhưng khác tên
+        if e.code == 85:
+            return
+        print(f"❌ Index error on {collection.name}: {e}")
+
     except Exception as e:
-        print(f"Error creating indexes: {e}")
+        print(f"❌ Index error on {collection.name}: {e}")
+
+
+# =========================
+# Init indexes (RUN ON STARTUP)
+# =========================
+
+def init_indexes():
+    """
+    Tạo index an toàn cho toàn bộ collections
+    """
+    # ---------- USERS ----------
+    safe_create_index(
+        users_collection,
+        [('email', 1)],
+        unique=True
+    )
+
+    # ---------- RESTAURANTS ----------
+    safe_create_index(
+        restaurants_collection,
+        [('name', 1), ('address', 1)],
+        unique=True
+    )
+
+    safe_create_index(
+        restaurants_collection,
+        [('name', 'text')]
+    )
+
+    safe_create_index(
+        restaurants_collection,
+        [('menu.items.name', 1)]
+    )
+
+    # ---------- ORDERS ----------
+    safe_create_index(orders_collection, [('userId', 1)])
+    safe_create_index(orders_collection, [('restaurantId', 1)])
+    safe_create_index(orders_collection, [('shipperId', 1)])
+    safe_create_index(orders_collection, [('status', 1)])
+
+    safe_create_index(
+        orders_collection,
+        [('userId', 1), ('createdAt', -1)]
+    )
+
+    safe_create_index(
+        orders_collection,
+        [('restaurantId', 1), ('createdAt', -1)]
+    )
+
+    safe_create_index(
+        orders_collection,
+        [('shipperId', 1), ('createdAt', -1)]
+    )
+
+    safe_create_index(
+        orders_collection,
+        [('status', 1), ('createdAt', -1)]
+    )
+
+    # ---------- PAYMENTS ----------
+    safe_create_index(payments_collection, [('orderId', 1)])
+    safe_create_index(payments_collection, [('userId', 1)])
+    safe_create_index(payments_collection, [('status', 1)])
+
+    safe_create_index(
+        payments_collection,
+        [('userId', 1), ('createdAt', -1)]
+    )
+
+    # ---------- VOUCHERS ----------
+    safe_create_index(
+        vouchers_collection,
+        [('code', 1)],
+        unique=True
+    )
+
+    safe_create_index(vouchers_collection, [('active', 1)])
+    safe_create_index(vouchers_collection, [('restaurantId', 1)])
+
+    # ---------- REVIEWS ----------
+    safe_create_index(
+        reviews_collection,
+        [('orderId', 1)],
+        unique=True
+    )
+
+    safe_create_index(reviews_collection, [('userId', 1)])
+    safe_create_index(reviews_collection, [('restaurantId', 1)])
+
+    safe_create_index(
+        reviews_collection,
+        [('restaurantId', 1), ('createdAt', -1)]
+    )
+
+    safe_create_index(
+        reviews_collection,
+        [('userId', 1), ('createdAt', -1)]
+    )
+
+    # ---------- CART ----------
+    safe_create_index(
+        cart_collection,
+        [('userId', 1)],
+        unique=True
+    )
+
+    print("✅ MongoDB indexes initialized safely")
